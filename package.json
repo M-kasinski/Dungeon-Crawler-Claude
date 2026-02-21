@@ -17,7 +17,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "redis": "^5.11.0",
+    "@upstash/redis": "^1.36.2",
     "zod": "^3.23.0"
   },
   "devDependencies": {
