@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { loadState, saveState } from "../state.js";
+import { getStorage } from "../storage.js";
 
 export function registerInventoryTools(server: McpServer): void {
   server.registerTool(
@@ -18,9 +18,10 @@ export function registerInventoryTools(server: McpServer): void {
       },
     },
     async ({ name, type, description }) => {
-      const state = loadState();
+      const storage = getStorage();
+      const state = await storage.load();
       state.inventory.push({ name, type, description });
-      saveState(state);
+      await storage.save(state);
       return {
         content: [
           {
@@ -41,7 +42,8 @@ export function registerInventoryTools(server: McpServer): void {
       },
     },
     async ({ name }) => {
-      const state = loadState();
+      const storage = getStorage();
+      const state = await storage.load();
       const index = state.inventory.findIndex(
         (item) => item.name.toLowerCase() === name.toLowerCase()
       );
@@ -54,7 +56,7 @@ export function registerInventoryTools(server: McpServer): void {
         };
       }
       state.inventory.splice(index, 1);
-      saveState(state);
+      await storage.save(state);
       return {
         content: [
           {
@@ -74,7 +76,7 @@ export function registerInventoryTools(server: McpServer): void {
       inputSchema: {},
     },
     async () => {
-      const state = loadState();
+      const state = await getStorage().load();
       const result = {
         inventory: state.inventory,
         equipped: state.equipped,

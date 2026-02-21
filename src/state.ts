@@ -1,10 +1,3 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const STATE_PATH = join(__dirname, "../data/state.json");
-
 export interface Item {
   name: string;
   type: string; // "weapon" | "armor" | "accessory" | "consumable" | "misc"
@@ -29,6 +22,11 @@ export interface GameState {
   session_summary: string;
 }
 
+export interface Storage {
+  load(): Promise<GameState>;
+  save(state: GameState): Promise<void>;
+}
+
 export const DEFAULT_STATE: GameState = {
   player: {
     name: null,
@@ -46,19 +44,3 @@ export const DEFAULT_STATE: GameState = {
   visited_locations: [],
   session_summary: "",
 };
-
-export function loadState(): GameState {
-  if (!existsSync(STATE_PATH)) {
-    return structuredClone(DEFAULT_STATE);
-  }
-  const raw = readFileSync(STATE_PATH, "utf-8");
-  return JSON.parse(raw) as GameState;
-}
-
-export function saveState(state: GameState): void {
-  const dir = dirname(STATE_PATH);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
-  }
-  writeFileSync(STATE_PATH, JSON.stringify(state, null, 2), "utf-8");
-}

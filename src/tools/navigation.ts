@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { loadState, saveState } from "../state.js";
+import { getStorage } from "../storage.js";
 
 export function registerNavigationTools(server: McpServer): void {
   server.registerTool(
@@ -13,7 +13,8 @@ export function registerNavigationTools(server: McpServer): void {
       },
     },
     async ({ location }) => {
-      const state = loadState();
+      const storage = getStorage();
+      const state = await storage.load();
       const previous = state.player.location;
 
       if (!state.visited_locations.includes(previous)) {
@@ -21,7 +22,7 @@ export function registerNavigationTools(server: McpServer): void {
       }
 
       state.player.location = location;
-      saveState(state);
+      await storage.save(state);
 
       return {
         content: [
@@ -42,7 +43,7 @@ export function registerNavigationTools(server: McpServer): void {
       inputSchema: {},
     },
     async () => {
-      const state = loadState();
+      const state = await getStorage().load();
       const result = {
         current_location: state.player.location,
         visited_locations: state.visited_locations,
@@ -65,7 +66,7 @@ export function registerNavigationTools(server: McpServer): void {
       },
     },
     async ({ context }) => {
-      const state = loadState();
+      const state = await getStorage().load();
       const result = {
         current_location: state.player.location,
         visited_locations: state.visited_locations,

@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { loadState, saveState } from "../state.js";
+import { getStorage } from "../storage.js";
 
 export function registerSessionTools(server: McpServer): void {
   server.registerTool(
@@ -17,9 +17,10 @@ export function registerSessionTools(server: McpServer): void {
       },
     },
     async ({ text }) => {
-      const state = loadState();
+      const storage = getStorage();
+      const state = await storage.load();
       state.session_summary = text;
-      saveState(state);
+      await storage.save(state);
       return {
         content: [{ type: "text", text: "Session summary saved." }],
       };
@@ -34,7 +35,7 @@ export function registerSessionTools(server: McpServer): void {
       inputSchema: {},
     },
     async () => {
-      const state = loadState();
+      const state = await getStorage().load();
 
       const equippedLines = [
         `  Weapon: ${state.equipped.weapon ? `${state.equipped.weapon.name} — ${state.equipped.weapon.description}` : "none"}`,

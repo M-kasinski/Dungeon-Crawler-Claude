@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { loadState, saveState } from "../state.js";
+import { getStorage } from "../storage.js";
 
 const EQUIPPABLE_TYPES = ["weapon", "armor", "accessory"] as const;
 type EquipSlot = (typeof EQUIPPABLE_TYPES)[number];
@@ -20,7 +20,8 @@ export function registerEquipmentTools(server: McpServer): void {
       },
     },
     async ({ name }) => {
-      const state = loadState();
+      const storage = getStorage();
+      const state = await storage.load();
 
       const index = state.inventory.findIndex(
         (item) => item.name.toLowerCase() === name.toLowerCase()
@@ -59,7 +60,7 @@ export function registerEquipmentTools(server: McpServer): void {
       state.inventory.splice(index, 1);
       state.equipped[slot] = item;
 
-      saveState(state);
+      await storage.save(state);
 
       const msg = previousItem
         ? `"${name}" equipped as ${slot}. "${previousItem.name}" returned to inventory.`
@@ -81,7 +82,8 @@ export function registerEquipmentTools(server: McpServer): void {
       },
     },
     async ({ slot }) => {
-      const state = loadState();
+      const storage = getStorage();
+      const state = await storage.load();
       const item = state.equipped[slot];
 
       if (item === null) {
@@ -93,7 +95,7 @@ export function registerEquipmentTools(server: McpServer): void {
 
       state.inventory.push(item);
       state.equipped[slot] = null;
-      saveState(state);
+      await storage.save(state);
 
       return {
         content: [
@@ -113,7 +115,7 @@ export function registerEquipmentTools(server: McpServer): void {
       inputSchema: {},
     },
     async () => {
-      const state = loadState();
+      const state = await getStorage().load();
       return {
         content: [
           { type: "text", text: JSON.stringify(state.equipped, null, 2) },

@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadState } from "../state.js";
+import { getStorage } from "../storage.js";
 
 export function registerStartSessionPrompt(server: McpServer): void {
   server.registerPrompt(
@@ -9,7 +9,7 @@ export function registerStartSessionPrompt(server: McpServer): void {
         "Starts or resumes a game session. Loads the full state and sets the narrative context for Claude.",
     },
     async () => {
-      const state = loadState();
+      const state = await getStorage().load();
 
       const equippedLines = [
         `  Weapon: ${state.equipped.weapon ? `${state.equipped.weapon.name} — ${state.equipped.weapon.description}` : "none"}`,

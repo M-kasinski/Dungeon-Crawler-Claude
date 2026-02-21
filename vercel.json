@@ -1,0 +1,4 @@
+{
+  "buildCommand": "",
+  "rewrites": [{ "source": "/mcp", "destination": "/api/mcp" }]
+}

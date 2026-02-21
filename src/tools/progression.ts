@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { loadState, saveState } from "../state.js";
+import { getStorage } from "../storage.js";
 
 const CLASS_EVENT_INTERVAL = 5;
 
@@ -13,10 +13,11 @@ export function registerProgressionTools(server: McpServer): void {
       inputSchema: {},
     },
     async () => {
-      const state = loadState();
+      const storage = getStorage();
+      const state = await storage.load();
       state.player.level += 1;
       const classEvent = state.player.level % CLASS_EVENT_INTERVAL === 0;
-      saveState(state);
+      await storage.save(state);
       return {
         content: [
           {
@@ -45,10 +46,11 @@ export function registerProgressionTools(server: McpServer): void {
       },
     },
     async ({ className, perks }) => {
-      const state = loadState();
+      const storage = getStorage();
+      const state = await storage.load();
       state.player.class = className;
       state.player.perks = perks;
-      saveState(state);
+      await storage.save(state);
       return {
         content: [
           {
@@ -67,7 +69,7 @@ export function registerProgressionTools(server: McpServer): void {
       inputSchema: {},
     },
     async () => {
-      const state = loadState();
+      const state = await getStorage().load();
       const result = {
         level: state.player.level,
         class: state.player.class,

@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadState } from "../state.js";
+import { getStorage } from "../storage.js";
 
 export function registerNavigationEventPrompt(server: McpServer): void {
   server.registerPrompt(
@@ -9,7 +9,7 @@ export function registerNavigationEventPrompt(server: McpServer): void {
         "Triggers a navigation event: present 2-4 unexplored exits for the player to choose from, then move them.",
     },
     async () => {
-      const state = loadState();
+      const state = await getStorage().load();
       const visitedList =
         state.visited_locations.length > 0
           ? state.visited_locations.map((l) => `  - ${l}`).join("\n")

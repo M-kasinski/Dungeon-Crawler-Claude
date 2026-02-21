@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { loadState, saveState, DEFAULT_STATE } from "../state.js";
+import { DEFAULT_STATE } from "../state.js";
+import { getStorage } from "../storage.js";
 
 export function registerPlayerTools(server: McpServer): void {
   server.registerTool(
@@ -11,7 +12,7 @@ export function registerPlayerTools(server: McpServer): void {
       inputSchema: {},
     },
     async () => {
-      const state = loadState();
+      const state = await getStorage().load();
       return {
         content: [{ type: "text", text: JSON.stringify(state, null, 2) }],
       };
@@ -31,12 +32,13 @@ export function registerPlayerTools(server: McpServer): void {
       },
     },
     async ({ name, class: playerClass, level, location }) => {
-      const state = loadState();
+      const storage = getStorage();
+      const state = await storage.load();
       if (name !== undefined) state.player.name = name;
       if (playerClass !== undefined) state.player.class = playerClass;
       if (level !== undefined) state.player.level = level;
       if (location !== undefined) state.player.location = location;
-      saveState(state);
+      await storage.save(state);
       return {
         content: [
           {
@@ -56,7 +58,7 @@ export function registerPlayerTools(server: McpServer): void {
       inputSchema: {},
     },
     async () => {
-      saveState(structuredClone(DEFAULT_STATE));
+      await getStorage().save(structuredClone(DEFAULT_STATE));
       return {
         content: [{ type: "text", text: "Game state reset to default." }],
       };

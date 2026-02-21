@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { loadState } from "../state.js";
+import { getStorage } from "../storage.js";
 
 export function registerClassSelectionPrompt(server: McpServer): void {
   server.registerPrompt(
@@ -18,7 +18,7 @@ export function registerClassSelectionPrompt(server: McpServer): void {
       },
     },
     async ({ context }) => {
-      const state = loadState();
+      const state = await getStorage().load();
       const playstyleNote = context
         ? `\nAdditional context about the player's playstyle: ${context}`
         : "";
