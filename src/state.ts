@@ -8,10 +8,14 @@ export interface GameState {
   player: {
     name: string | null;
     class: string | null;
+    class_tier: number; // 0=none, 1=class, 2=evolution, 3=mastery
     level: number;
     location: string;
     perks: string[];
+    stats: { str: number; agi: number; int: number; vit: number; lck: number };
   };
+  floor: number;
+  tome: number;
   inventory: Item[];
   equipped: {
     weapon: Item | null;
@@ -31,10 +35,14 @@ export const DEFAULT_STATE: GameState = {
   player: {
     name: null,
     class: null,
+    class_tier: 0,
     level: 1,
     location: "Floor 1 - Entrance",
     perks: [],
+    stats: { str: 10, agi: 10, int: 10, vit: 10, lck: 10 },
   },
+  floor: 1,
+  tome: 1,
   inventory: [],
   equipped: {
     weapon: null,

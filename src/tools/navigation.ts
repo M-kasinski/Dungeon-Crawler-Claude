@@ -55,6 +55,42 @@ export function registerNavigationTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "descend_floor",
+    {
+      description:
+        "Descends the player to the next dungeon floor. Irreversible. Clears visited_locations for the new floor. Every 5 floors triggers a tome milestone — save a session summary and tell the player to start a new conversation.",
+      inputSchema: {},
+    },
+    async () => {
+      const storage = getStorage();
+      const state = await storage.load();
+      state.floor += 1;
+      state.visited_locations = [];
+      state.player.location = `Floor ${state.floor} - Entrance`;
+
+      let milestone = false;
+      if (state.floor % 5 === 0) {
+        state.tome += 1;
+        milestone = true;
+      }
+
+      await storage.save(state);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              { floor: state.floor, tome: state.tome, milestone },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+  );
+
+  server.registerTool(
     "suggest_exits",
     {
       description:

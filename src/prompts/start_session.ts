@@ -40,6 +40,8 @@ export function registerStartSessionPrompt(server: McpServer): void {
         ? "(No previous session — this is the beginning. Welcome the player to the dungeon and ask for their name before anything else.)"
         : state.session_summary || "(No summary saved — resume from current state as best you can.)";
 
+      const classTierLabel = ["None", "Class", "Evolution", "Mastery"][state.player.class_tier] ?? "Unknown";
+
       return {
         messages: [
           {
@@ -54,10 +56,17 @@ A new conversation has started. Here is the complete game state to resume from:
 
 PLAYER
   Name:     ${state.player.name ?? "(not set)"}
-  Class:    ${state.player.class ?? "(not chosen yet)"}
+  Class:    ${state.player.class ?? "(not chosen yet)"} [${classTierLabel}]
   Level:    ${state.player.level}
   Location: ${state.player.location}
   Perks:    ${perksLine}
+
+STATS
+  STR ${state.player.stats.str}  AGI ${state.player.stats.agi}  INT ${state.player.stats.int}  VIT ${state.player.stats.vit}  LCK ${state.player.stats.lck}
+
+DUNGEON
+  Floor:    ${state.floor}
+  Tome:     ${state.tome}
 
 EQUIPPED
 ${equippedLines}
@@ -65,7 +74,7 @@ ${equippedLines}
 INVENTORY (${state.inventory.length} item(s))
 ${inventoryLines}
 
-VISITED LOCATIONS
+VISITED LOCATIONS (this floor)
 ${visitedLines}
 
 LAST SESSION
@@ -80,6 +89,11 @@ INSTRUCTIONS:
 - Maintain the sardonic System voice throughout
 - When the player does something that changes state (picks up loot, moves, levels up), call the appropriate tool to persist it
 - If this is a new game, start fresh: welcome the player to the dungeon and ask for their name
+- Descending to the next floor is a major narrative event — describe it with weight; call descend_floor when the player commits to going deeper
+- Going back to a previous floor is impossible — the dungeon only goes down
+- When level_up returns stat_gains, announce the stat increases in the System's sardonic voice before resuming the story
+- When level_up returns class_tier_event (1, 2, or 3), trigger /dungeon__class_selection at a dramatically appropriate moment in the session
+- When descend_floor returns milestone: true, call save_summary with a rich narrative summary of this arc, then tell the player: "This is the end of Tome [X]. Start a new conversation to continue."
 
 Begin now.`,
             },
