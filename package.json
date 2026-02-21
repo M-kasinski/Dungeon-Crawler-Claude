@@ -1,0 +1,23 @@
+{
+  "name": "dungeon-crawler-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for LitRPG Dungeon Crawler game state",
+  "type": "module",
+  "bin": {
+    "dungeon-crawler": "./build/index.js"
+  },
+  "scripts": {
+    "build": "tsc && chmod 755 build/index.js",
+    "dev": "tsc --watch",
+    "start": "node build/index.js"
+  },
+  "files": ["build", "data"],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
