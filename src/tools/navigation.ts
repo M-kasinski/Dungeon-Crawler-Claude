@@ -2,6 +2,21 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getStorage } from "../storage.js";
 
+const FLOOR_THEMES = [
+  "Flooded Ruins",
+  "Bone Cathedral",
+  "Fungal Depths",
+  "Crumbling Archive",
+  "Sulfur Vents",
+  "Frozen Tombs",
+  "Flesh Labyrinth",
+  "Shattered Clockwork",
+  "Drowned Marketplace",
+  "Crystalline Abyss",
+  "Plague Ward",
+  "Ember Vaults",
+];
+
 export function registerNavigationTools(server: McpServer): void {
   server.registerTool(
     "move_to",
@@ -67,6 +82,10 @@ export function registerNavigationTools(server: McpServer): void {
       state.floor += 1;
       state.visited_locations = [];
       state.player.location = `Floor ${state.floor} - Entrance`;
+      state.floor_event_count = 0;
+
+      const available = FLOOR_THEMES.filter((t) => t !== state.floor_theme);
+      state.floor_theme = available[Math.floor(Math.random() * available.length)];
 
       let milestone = false;
       if (state.floor % 5 === 0) {
@@ -80,7 +99,7 @@ export function registerNavigationTools(server: McpServer): void {
           {
             type: "text",
             text: JSON.stringify(
-              { floor: state.floor, tome: state.tome, milestone },
+              { floor: state.floor, tome: state.tome, milestone, floor_theme: state.floor_theme },
               null,
               2
             ),

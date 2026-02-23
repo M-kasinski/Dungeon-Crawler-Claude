@@ -30,13 +30,14 @@ export function registerProgressionTools(server: McpServer): void {
         statGains[pick] += 1;
       }
 
+      state.events_since_level_up = 0;
       await storage.save(state);
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify(
-              { new_level: state.player.level, class_tier_event: classTierEvent, stat_gains: statGains, stats: state.player.stats },
+              { new_level: state.player.level, class_tier_event: classTierEvent, stat_gains: statGains, stats: state.player.stats, events_since_level_up: 0 },
               null,
               2
             ),

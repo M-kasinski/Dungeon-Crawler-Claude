@@ -24,6 +24,10 @@ export interface GameState {
   };
   visited_locations: string[];
   session_summary: string;
+  floor_theme: string;
+  floor_event_count: number;
+  events_since_level_up: number;
+  wounds: string[];
 }
 
 export interface Storage {
@@ -51,4 +55,8 @@ export const DEFAULT_STATE: GameState = {
   },
   visited_locations: [],
   session_summary: "",
+  floor_theme: "Dungeon Entrance",
+  floor_event_count: 0,
+  events_since_level_up: 0,
+  wounds: [],
 };

@@ -81,21 +81,20 @@ Serveur MCP Node.js/TypeScript. Claude Desktop gère la narration, le MCP gère 
 src/
   index.ts              # entrée stdio — wire server + StdioServerTransport
   server.ts             # createServer() — importe et enregistre tous les tools/prompts
-  state.ts              # GameState, loadState(), saveState(), DEFAULT_STATE
+  state.ts              # GameState, DEFAULT_STATE, Storage interface
   tools/
-    player.ts           # MVP1 : get_state, update_player, reset_game
-    inventory.ts        # MVP2 : add_item, remove_item, get_inventory
-    equipment.ts        # MVP3 : equip_item, unequip_slot, get_equipped
-    progression.ts      # MVP4 : level_up, set_class, get_progression
-    navigation.ts       # MVP5 : move_to, get_map, suggest_exits
-    session.ts          # MVP6 : save_summary, get_session_context
+    player.ts           # get_state, update_player, reset_game, add_wound, heal_wound
+    inventory.ts        # add_item, remove_item, get_inventory
+    equipment.ts        # equip_item, unequip_slot, get_equipped
+    progression.ts      # level_up, set_class, get_progression
+    navigation.ts       # move_to, get_map, suggest_exits, descend_floor
+    session.ts          # save_summary, get_session_context
+    events.ts           # log_event (compteur de rythme — floor + level up)
   prompts/
-    loot_event.ts       # MVP2 — template loot
-    class_selection.ts  # MVP4 — template choix de classe (argsSchema: { context? })
-    navigation_event.ts # MVP5 — template navigation
-    start_session.ts    # MVP6 — reprise de session (prompt principal joueur)
+    start_session.ts    # prompt "start" — état complet + toutes les règles narratives
 data/state.json         # état persistant JSON (gitignored, créé au premier run)
 build/                  # JS compilé (gitignored) — npm run build
+BACKLOG.md              # ticket Lot 3 (resolve_combat, rareté items)
 ```
 
 ### Règles critiques
@@ -108,13 +107,28 @@ build/                  # JS compilé (gitignored) — npm run build
 ```typescript
 interface Item { name: string; type: string; description: string; }
 interface GameState {
-  player: { name: string|null; class: string|null; level: number; location: string; perks: string[]; };
+  player: {
+    name: string|null; class: string|null; class_tier: number;
+    level: number; location: string; perks: string[];
+    stats: { str: number; agi: number; int: number; vit: number; lck: number };
+  };
+  floor: number;
+  tome: number;
+  floor_theme: string;          // biome du floor, assigné aléatoirement à chaque descente
+  floor_event_count: number;    // événements depuis la dernière descente
+  events_since_level_up: number; // événements depuis le dernier level up
+  wounds: string[];             // blessures persistantes
   inventory: Item[];
   equipped: { weapon: Item|null; armor: Item|null; accessory: Item|null; };
   visited_locations: string[];
   session_summary: string;
 }
 ```
+
+### Outil de rythme : log_event
+Appelé par Claude après chaque événement significatif (combat, loot, npc, trap, discovery, puzzle).
+Retourne `level_up_available: true` si `events_since_level_up >= 4`, `floor_complete: true` si `floor_event_count >= 5`.
+`descend_floor` reset `floor_event_count` + assigne un nouveau `floor_theme`. `level_up` reset `events_since_level_up`.
 
 ### Config Claude Desktop
 `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -124,5 +138,5 @@ interface GameState {
   "args": ["/Users/m.kasinski/labs/Dungeon_crawler_claude/build/index.js"]
 }
 ```
-Namespace des tools : `dungeon__get_state`, prompt joueur : `/dungeon__start_session`
+Namespace des tools : `dungeon__get_state`, prompt joueur : `/dungeon__start`
 Logs : `~/Library/Logs/Claude/mcp-server-dungeon.log`

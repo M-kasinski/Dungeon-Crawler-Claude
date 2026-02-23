@@ -5,9 +5,7 @@ import { registerEquipmentTools } from "./tools/equipment.js";
 import { registerProgressionTools } from "./tools/progression.js";
 import { registerNavigationTools } from "./tools/navigation.js";
 import { registerSessionTools } from "./tools/session.js";
-import { registerLootEventPrompt } from "./prompts/loot_event.js";
-import { registerClassSelectionPrompt } from "./prompts/class_selection.js";
-import { registerNavigationEventPrompt } from "./prompts/navigation_event.js";
+import { registerEventsTools } from "./tools/events.js";
 import { registerStartSessionPrompt } from "./prompts/start_session.js";
 
 export function createServer(): McpServer {
@@ -23,11 +21,9 @@ export function createServer(): McpServer {
   registerProgressionTools(server);
   registerNavigationTools(server);
   registerSessionTools(server);
+  registerEventsTools(server);
 
   // Prompts
-  registerLootEventPrompt(server);
-  registerClassSelectionPrompt(server);
-  registerNavigationEventPrompt(server);
   registerStartSessionPrompt(server);
 
   return server;
