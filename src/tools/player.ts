@@ -29,15 +29,17 @@ export function registerPlayerTools(server: McpServer): void {
         class: z.string().optional().describe("Player class"),
         level: z.number().int().min(1).optional().describe("Player level"),
         location: z.string().optional().describe("Current location"),
+        backstory: z.string().optional().describe("Protagonist backstory / origin"),
       },
     },
-    async ({ name, class: playerClass, level, location }) => {
+    async ({ name, class: playerClass, level, location, backstory }) => {
       const storage = getStorage();
       const state = await storage.load();
       if (name !== undefined) state.player.name = name;
       if (playerClass !== undefined) state.player.class = playerClass;
       if (level !== undefined) state.player.level = level;
       if (location !== undefined) state.player.location = location;
+      if (backstory !== undefined) state.player.backstory = backstory;
       await storage.save(state);
       return {
         content: [
