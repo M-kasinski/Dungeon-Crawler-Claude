@@ -32,12 +32,12 @@ export function registerStartSessionPrompt(server: McpServer): void {
       const woundsLines =
         state.wounds.length === 0
           ? "  (aucune)"
-          : state.wounds.map((w) => `  - ${w}`).join("\n");
+          : state.wounds.map((wound) => `  - ${wound.description}`).join("\n");
 
       const threadsLines =
         state.story_threads.length === 0
           ? "  (aucun)"
-          : state.story_threads.map((t) => `  - ${t}`).join("\n");
+          : state.story_threads.map((thread) => `  - ${thread.text}`).join("\n");
 
       const arcBlock = state.story_arc
         ? [
@@ -147,7 +147,7 @@ PENDANT L'ÉCRITURE :
 - Appeler add_item(name, type, description) pour chaque item obtenu — le protagoniste trouve ce que l'histoire exige
 - Si log_event retourne level_up_available: true → appeler level_up() et intégrer l'event dans la prose
 - Si log_event retourne floor_complete: true → le protagoniste peut descendre narrativement si cohérent ; appeler descend_floor()
-- Si descend_floor retourne milestone: true → fin du tome ; appeler save_summary, puis indiquer : "Fin du Tome [X] — démarrer une nouvelle conversation pour continuer."
+- Si descend_floor retourne milestone: true → fin du tome ; appeler end_chapter(summary, word_count) pour clore, puis indiquer : "Fin du Tome [X] — démarrer une nouvelle conversation pour continuer."
 - Si un nouveau fil narratif est introduit → appeler add_story_thread(thread)
 - Si un fil narratif est résolu dans la prose → appeler resolve_story_thread(thread)
 
@@ -170,11 +170,10 @@ Quand level_up() est appelé, le Système interrompt le flux narratif :
 - Si class_tier_event → noter mentalement, présenter les options APRÈS le chapitre (voir CLASS EVOLUTION)
 
 APRÈS LE CHAPITRE :
-1. Appeler save_summary(text) — résumé narratif dense de ce qui s'est passé
-2. Appeler log_words(count) — estimation honnête du nombre de mots écrits
-3. Si l'acte est narrativement conclu → appeler advance_arc()
-4. Afficher le bloc de fin de chapitre (format ci-dessous)
-5. Si class_tier_event s'est produit → afficher les options de classe après le bloc
+1. Appeler end_chapter(summary, word_count, new_threads?, resolved_thread_ids?, resolved_threads?) — clôture atomique : résumé + compteur de mots + fils narratifs. Préférer resolved_thread_ids (ids retournés par add_story_thread) ; utiliser resolved_threads (texte exact) seulement si l'id n'est pas disponible
+2. Si l'acte est narrativement conclu → appeler advance_arc()
+3. Afficher le bloc de fin de chapitre (format ci-dessous)
+4. Si class_tier_event s'est produit → afficher les options de classe après le bloc
 
 ### FORMAT DE FIN DE CHAPITRE
 

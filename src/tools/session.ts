@@ -1,37 +1,36 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getStorage } from "../storage.js";
+import { createEntityId, type StoryThread } from "../state.js";
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function findThreadMatches(
+  storyThreads: StoryThread[],
+  input: { id?: string; thread?: string }
+): StoryThread[] {
+  if (input.id) {
+    return storyThreads.filter((storyThread) => storyThread.id === input.id);
+  }
+
+  if (!input.thread) {
+    return [];
+  }
+
+  const normalized = normalizeText(input.thread);
+  return storyThreads.filter(
+    (storyThread) => normalizeText(storyThread.text) === normalized
+  );
+}
 
 export function registerSessionTools(server: McpServer): void {
-  server.registerTool(
-    "save_summary",
-    {
-      description:
-        "Saves a narrative summary of the current chapter. Overwrites the previous summary. Call at the end of each chapter so the story can be resumed later.",
-      inputSchema: {
-        text: z
-          .string()
-          .describe(
-            "Dense narrative summary: what happened, where the protagonist is, key events, active wounds, items acquired"
-          ),
-      },
-    },
-    async ({ text }) => {
-      const storage = getStorage();
-      const state = await storage.load();
-      state.session_summary = text;
-      await storage.save(state);
-      return {
-        content: [{ type: "text", text: "Session summary saved." }],
-      };
-    }
-  );
-
   server.registerTool(
     "get_session_context",
     {
       description:
-        "Returns a fully formatted context block with everything needed to resume the story: protagonist info, arc plan, story threads, equipment, inventory, and session summary.",
+        "Returns a fully formatted context block for story resumption or narrative debugging. Prefer the start prompt at the beginning of a normal session.",
       inputSchema: {},
     },
     async () => {
@@ -58,7 +57,7 @@ export function registerSessionTools(server: McpServer): void {
       const threadsLines =
         state.story_threads.length === 0
           ? "  (aucun fil actif)"
-          : state.story_threads.map((t) => `  - ${t}`).join("\n");
+          : state.story_threads.map((thread) => `  - ${thread.text}`).join("\n");
 
       const arcBlock = state.story_arc
         ? [
@@ -96,7 +95,7 @@ RYTHME
   Événements ce floor: ${state.floor_event_count} | Depuis dernier level up: ${state.events_since_level_up}
 
 BLESSURES (${state.wounds.length})
-${state.wounds.length === 0 ? "  (aucune)" : state.wounds.map((w) => `  - ${w}`).join("\n")}
+${state.wounds.length === 0 ? "  (aucune)" : state.wounds.map((wound) => `  - ${wound.description}`).join("\n")}
 
 ÉQUIPEMENT
 ${equippedLines}
@@ -239,13 +238,29 @@ ${state.session_summary || "(aucun résumé — nouvelle histoire)"}
     async ({ thread }) => {
       const storage = getStorage();
       const state = await storage.load();
-      if (!state.story_threads.includes(thread)) {
-        state.story_threads.push(thread);
+      const normalized = normalizeText(thread);
+      const existing = state.story_threads.find(
+        (storyThread) => normalizeText(storyThread.text) === normalized
+      );
+      const storyThread = existing ?? { id: createEntityId(), text: thread };
+      if (!existing) {
+        state.story_threads.push(storyThread);
       }
       await storage.save(state);
       return {
         content: [
-          { type: "text", text: JSON.stringify({ story_threads: state.story_threads }, null, 2) },
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                story_thread: storyThread,
+                duplicated: existing !== undefined,
+                story_threads: state.story_threads,
+              },
+              null,
+              2
+            ),
+          },
         ],
       };
     }
@@ -255,23 +270,62 @@ ${state.session_summary || "(aucun résumé — nouvelle histoire)"}
     "resolve_story_thread",
     {
       description:
-        "Closes a narrative thread. Call when a thread is resolved in the prose.",
+        "Closes a narrative thread. Prefer using the thread id returned by add_story_thread. Text matching is supported only when it is unambiguous.",
       inputSchema: {
-        thread: z.string().describe("Exact text of the thread to remove"),
+        id: z.string().optional().describe("Stable thread id to resolve"),
+        thread: z
+          .string()
+          .optional()
+          .describe("Exact thread text to remove when no id is available"),
       },
     },
-    async ({ thread }) => {
+    async ({ id, thread }) => {
       const storage = getStorage();
       const state = await storage.load();
-      const idx = state.story_threads.indexOf(thread);
-      const resolved = idx !== -1;
-      if (resolved) state.story_threads.splice(idx, 1);
+      if (!id && !thread) {
+        return {
+          content: [{ type: "text", text: 'Provide either "id" or "thread".' }],
+          isError: true,
+        };
+      }
+
+      const matches = findThreadMatches(state.story_threads, { id, thread });
+      if (matches.length > 1) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  resolved: false,
+                  reason: "ambiguous_story_thread_match",
+                  candidates: matches,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const storyThread = matches[0];
+      const resolved = storyThread !== undefined;
+      if (storyThread) {
+        const idx = state.story_threads.findIndex((entry) => entry.id === storyThread.id);
+        state.story_threads.splice(idx, 1);
+      }
       await storage.save(state);
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify({ resolved, story_threads: state.story_threads }, null, 2),
+            text: JSON.stringify(
+              { resolved, story_thread: storyThread ?? null, story_threads: state.story_threads },
+              null,
+              2
+            ),
           },
         ],
       };
@@ -279,25 +333,96 @@ ${state.session_summary || "(aucun résumé — nouvelle histoire)"}
   );
 
   server.registerTool(
-    "log_words",
+    "end_chapter",
     {
       description:
-        "Adds N words to the novel's total word counter. Call after each chapter with an estimated word count.",
+        "Single atomic call to close a chapter and prepare the next session. Saves summary, logs word count, adds new story threads, and resolves closed ones. Always call this at the end of a chapter before closing the conversation.",
       inputSchema: {
-        count: z.number().int().min(1).describe("Number of words in this chapter"),
+        summary: z
+          .string()
+          .describe(
+            "Dense narrative summary for next session: location, key events, wounds, items acquired, cliffhanger if any"
+          ),
+        word_count: z.number().int().min(1).describe("Estimated word count written this chapter"),
+        new_threads: z
+          .array(z.string())
+          .optional()
+          .describe("New unresolved narrative threads introduced this chapter"),
+        resolved_thread_ids: z
+          .array(z.string())
+          .optional()
+          .describe("Preferred: stable thread ids returned by add_story_thread for threads resolved this chapter"),
+        resolved_threads: z
+          .array(z.string())
+          .optional()
+          .describe("Fallback: exact thread text when no id is available"),
       },
     },
-    async ({ count }) => {
+    async ({ summary, word_count, new_threads = [], resolved_thread_ids = [], resolved_threads = [] }) => {
       const storage = getStorage();
       const state = await storage.load();
-      state.total_words += count;
+      const createdThreadIds: string[] = [];
+      const unresolvedResolutionRequests: Array<{
+        thread: string;
+        reason: "not_found" | "ambiguous_story_thread_match";
+        candidates?: StoryThread[];
+      }> = [];
+
+      state.session_summary = summary;
+      state.total_words += word_count;
+
+      for (const thread of new_threads) {
+        const normalized = normalizeText(thread);
+        const existing = state.story_threads.find(
+          (storyThread) => normalizeText(storyThread.text) === normalized
+        );
+        if (!existing) {
+          const storyThread = { id: createEntityId(), text: thread };
+          state.story_threads.push(storyThread);
+          createdThreadIds.push(storyThread.id);
+        }
+      }
+
+      for (const id of resolved_thread_ids) {
+        const matches = findThreadMatches(state.story_threads, { id });
+        if (matches.length === 1) {
+          const idx = state.story_threads.findIndex((entry) => entry.id === matches[0].id);
+          state.story_threads.splice(idx, 1);
+        }
+      }
+
+      for (const thread of resolved_threads) {
+        const matches = findThreadMatches(state.story_threads, { thread });
+        if (matches.length === 1) {
+          const idx = state.story_threads.findIndex((entry) => entry.id === matches[0].id);
+          state.story_threads.splice(idx, 1);
+          continue;
+        }
+
+        unresolvedResolutionRequests.push({
+          thread,
+          reason: matches.length === 0 ? "not_found" : "ambiguous_story_thread_match",
+          candidates: matches.length > 1 ? matches : undefined,
+        });
+      }
+
       await storage.save(state);
+
       return {
         content: [
           {
             type: "text",
             text: JSON.stringify(
-              { chapter_words: count, total_words: state.total_words },
+              {
+                status: "chapter_closed",
+                chapter_words: word_count,
+                total_words: state.total_words,
+                active_threads: state.story_threads.length,
+                created_thread_ids: createdThreadIds,
+                unresolved_resolution_requests: unresolvedResolutionRequests,
+                story_threads: state.story_threads,
+                instruction: "State saved. You can close this conversation and start a new one with /dungeon__start.",
+              },
               null,
               2
             ),

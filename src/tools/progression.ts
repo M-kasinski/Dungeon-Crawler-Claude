@@ -51,7 +51,7 @@ export function registerProgressionTools(server: McpServer): void {
     "set_class",
     {
       description:
-        "Sets the player's class and its narrative perks. Called after the player makes their class selection.",
+        "Sets the player's class and its narrative perks. Call only after a real class choice or evolution event, not as a manual progression shortcut.",
       inputSchema: {
         className: z.string().describe("Name of the chosen class"),
         perks: z
@@ -77,23 +77,4 @@ export function registerProgressionTools(server: McpServer): void {
     }
   );
 
-  server.registerTool(
-    "get_progression",
-    {
-      description: "Returns the player's current level, class, and perks.",
-      inputSchema: {},
-    },
-    async () => {
-      const state = await getStorage().load();
-      const result = {
-        level: state.player.level,
-        class: state.player.class,
-        perks: state.player.perks,
-        stats: state.player.stats,
-      };
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    }
-  );
 }

@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getStorage } from "../storage.js";
+import type { Item } from "../state.js";
 
 const EQUIPPABLE_TYPES = ["weapon", "armor", "accessory"] as const;
 type EquipSlot = (typeof EQUIPPABLE_TYPES)[number];
@@ -9,39 +10,90 @@ function isEquippable(type: string): type is EquipSlot {
   return (EQUIPPABLE_TYPES as readonly string[]).includes(type);
 }
 
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function findByName(items: Item[], name: string): Item[] {
+  const normalized = normalizeText(name);
+  return items.filter((item) => normalizeText(item.name) === normalized);
+}
+
 export function registerEquipmentTools(server: McpServer): void {
   server.registerTool(
     "equip_item",
     {
       description:
-        "Equips an item from inventory. The item's type determines the slot (weapon/armor/accessory). If the slot is occupied, the previous item is returned to inventory.",
+        "Equips an item from inventory. Prefer the item id returned by add_item. The item's type determines the slot (weapon/armor/accessory). If the slot is occupied, the previous item is returned to inventory.",
       inputSchema: {
-        name: z.string().describe("Name of the item to equip"),
+        id: z.string().optional().describe("Stable item id to equip"),
+        name: z
+          .string()
+          .optional()
+          .describe("Item name to equip when there is only one matching item"),
       },
     },
-    async ({ name }) => {
+    async ({ id, name }) => {
       const storage = getStorage();
       const state = await storage.load();
+      if (!id && !name) {
+        return {
+          content: [{ type: "text", text: 'Provide either "id" or "name".' }],
+          isError: true,
+        };
+      }
 
-      const index = state.inventory.findIndex(
-        (item) => item.name.toLowerCase() === name.toLowerCase()
-      );
-      if (index === -1) {
+      let matches: Item[] = [];
+      if (id) {
+        matches = state.inventory.filter((item) => item.id === id);
+      } else if (name) {
+        matches = findByName(state.inventory, name);
+      }
+
+      if (matches.length === 0) {
         return {
           content: [
-            { type: "text", text: `Item "${name}" not found in inventory.` },
+            {
+              type: "text",
+              text: `Item ${id ? `with id "${id}"` : `"${name}"`} not found in inventory.`,
+            },
           ],
           isError: true,
         };
       }
 
-      const item = state.inventory[index];
+      if (!id && matches.length > 1) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  equipped: false,
+                  reason: "ambiguous_item_match",
+                  candidates: matches.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    type: item.type,
+                  })),
+                },
+                null,
+                2
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const item = matches[0];
+      const index = state.inventory.findIndex((inventoryItem) => inventoryItem.id === item.id);
       if (!isEquippable(item.type)) {
         return {
           content: [
             {
               type: "text",
-              text: `"${name}" (type: ${item.type}) cannot be equipped. Only weapon, armor, and accessory types can be equipped.`,
+              text: `"${item.name}" (type: ${item.type}) cannot be equipped. Only weapon, armor, and accessory types can be equipped.`,
             },
           ],
           isError: true,
@@ -61,12 +113,23 @@ export function registerEquipmentTools(server: McpServer): void {
       state.equipped[slot] = item;
 
       await storage.save(state);
-
-      const msg = previousItem
-        ? `"${name}" equipped as ${slot}. "${previousItem.name}" returned to inventory.`
-        : `"${name}" equipped as ${slot}.`;
-
-      return { content: [{ type: "text", text: msg }] };
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                equipped: true,
+                slot,
+                item,
+                previous_item: previousItem,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
     }
   );
 
@@ -101,26 +164,19 @@ export function registerEquipmentTools(server: McpServer): void {
         content: [
           {
             type: "text",
-            text: `"${item.name}" unequipped from ${slot} and returned to inventory.`,
+            text: JSON.stringify(
+              {
+                unequipped: true,
+                slot,
+                item,
+              },
+              null,
+              2
+            ),
           },
         ],
       };
     }
   );
 
-  server.registerTool(
-    "get_equipped",
-    {
-      description: "Returns the currently equipped items.",
-      inputSchema: {},
-    },
-    async () => {
-      const state = await getStorage().load();
-      return {
-        content: [
-          { type: "text", text: JSON.stringify(state.equipped, null, 2) },
-        ],
-      };
-    }
-  );
 }

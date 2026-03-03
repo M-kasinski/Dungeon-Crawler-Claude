@@ -1,6 +1,24 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getStorage } from "../storage.js";
+import { createEntityId, type Item, type ItemType } from "../state.js";
+
+const ITEM_TYPES: [ItemType, ...ItemType[]] = [
+  "weapon",
+  "armor",
+  "accessory",
+  "consumable",
+  "misc",
+];
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function findItemsByName(items: Item[], name: string): Item[] {
+  const normalized = normalizeText(name);
+  return items.filter((item) => normalizeText(item.name) === normalized);
+}
 
 export function registerInventoryTools(server: McpServer): void {
   server.registerTool(
@@ -10,7 +28,7 @@ export function registerInventoryTools(server: McpServer): void {
       inputSchema: {
         name: z.string().describe("Item name"),
         type: z
-          .string()
+          .enum(ITEM_TYPES)
           .describe(
             'Item type: "weapon", "armor", "accessory", "consumable", or "misc"'
           ),
@@ -20,13 +38,21 @@ export function registerInventoryTools(server: McpServer): void {
     async ({ name, type, description }) => {
       const storage = getStorage();
       const state = await storage.load();
-      state.inventory.push({ name, type, description });
+      const item = { id: createEntityId(), name, type, description };
+      state.inventory.push(item);
       await storage.save(state);
       return {
         content: [
           {
             type: "text",
-            text: `"${name}" added to inventory. Inventory now has ${state.inventory.length} item(s).`,
+            text: JSON.stringify(
+              {
+                item,
+                inventory_count: state.inventory.length,
+              },
+              null,
+              2
+            ),
           },
         ],
       };
@@ -36,54 +62,92 @@ export function registerInventoryTools(server: McpServer): void {
   server.registerTool(
     "remove_item",
     {
-      description: "Removes an item from the player's inventory by name.",
+      description:
+        "Removes an item from the player's inventory. Prefer using the item id returned by add_item. Name matching is supported only when it identifies a single item.",
       inputSchema: {
-        name: z.string().describe("Name of the item to remove"),
+        id: z.string().optional().describe("Stable item id to remove"),
+        name: z
+          .string()
+          .optional()
+          .describe("Item name to remove when there is only one matching item"),
       },
     },
-    async ({ name }) => {
+    async ({ id, name }) => {
       const storage = getStorage();
       const state = await storage.load();
-      const index = state.inventory.findIndex(
-        (item) => item.name.toLowerCase() === name.toLowerCase()
-      );
-      if (index === -1) {
+      if (!id && !name) {
         return {
           content: [
-            { type: "text", text: `Item "${name}" not found in inventory.` },
+            { type: "text", text: 'Provide either "id" or "name".' },
           ],
           isError: true,
         };
       }
+
+      let matches: Item[] = [];
+      if (id) {
+        matches = state.inventory.filter((item) => item.id === id);
+      } else if (name) {
+        matches = findItemsByName(state.inventory, name);
+      }
+
+      if (matches.length === 0) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Item ${id ? `with id "${id}"` : `"${name}"`} not found in inventory.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      if (!id && matches.length > 1) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  removed: false,
+                  reason: "ambiguous_item_match",
+                  candidates: matches.map((item) => ({
+                    id: item.id,
+                    name: item.name,
+                    type: item.type,
+                  })),
+                },
+                null,
+                2
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const itemToRemove = matches[0];
+      const index = state.inventory.findIndex((item) => item.id === itemToRemove.id);
       state.inventory.splice(index, 1);
       await storage.save(state);
       return {
         content: [
           {
             type: "text",
-            text: `"${name}" removed from inventory.`,
+            text: JSON.stringify(
+              {
+                removed: true,
+                item: itemToRemove,
+                inventory_count: state.inventory.length,
+              },
+              null,
+              2
+            ),
           },
         ],
       };
     }
   );
 
-  server.registerTool(
-    "get_inventory",
-    {
-      description:
-        "Returns the player's current inventory and equipped items.",
-      inputSchema: {},
-    },
-    async () => {
-      const state = await getStorage().load();
-      const result = {
-        inventory: state.inventory,
-        equipped: state.equipped,
-      };
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    }
-  );
 }
