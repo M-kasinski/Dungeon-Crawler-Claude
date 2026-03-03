@@ -1,5 +1,10 @@
 import { Redis } from "@upstash/redis";
-import { type GameState, type Storage, DEFAULT_STATE } from "../state.js";
+import {
+  type GameState,
+  type Storage,
+  DEFAULT_STATE,
+  normalizeState,
+} from "../state.js";
 
 const REDIS_KEY = "dungeon:state";
 
@@ -8,10 +13,10 @@ export class RedisStorage implements Storage {
 
   async load(): Promise<GameState> {
     const raw = await this.client.get<GameState>(REDIS_KEY);
-    return raw ?? structuredClone(DEFAULT_STATE);
+    return raw ? normalizeState(raw) : structuredClone(DEFAULT_STATE);
   }
 
   async save(state: GameState): Promise<void> {
-    await this.client.set(REDIS_KEY, state);
+    await this.client.set(REDIS_KEY, normalizeState(state));
   }
 }

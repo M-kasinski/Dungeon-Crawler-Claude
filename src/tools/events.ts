@@ -10,7 +10,7 @@ export function registerEventsTools(server: McpServer): void {
     "log_event",
     {
       description:
-        "Logs a significant game event. Call after: combat resolved, loot chosen, NPC interaction complete, trap triggered, discovery made, puzzle solved. Increments pacing counters and signals when a level up is due or the floor feels complete.",
+        "Logs a significant concluded story event. Call after: combat resolved, loot chosen, NPC interaction complete, trap triggered, discovery made, puzzle solved. Do not use for minor beats or atmosphere. Increments pacing counters and signals when a level up is due or the floor feels complete.",
       inputSchema: {
         type: z
           .enum(["combat", "loot", "npc", "trap", "discovery", "puzzle"])

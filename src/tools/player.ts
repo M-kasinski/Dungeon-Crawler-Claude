@@ -1,43 +1,30 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { DEFAULT_STATE } from "../state.js";
 import { getStorage } from "../storage.js";
+import { createEntityId } from "../state.js";
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
+}
 
 export function registerPlayerTools(server: McpServer): void {
-  server.registerTool(
-    "get_state",
-    {
-      description:
-        "Returns the complete current game state (player, inventory, equipment, map, session summary).",
-      inputSchema: {},
-    },
-    async () => {
-      const state = await getStorage().load();
-      return {
-        content: [{ type: "text", text: JSON.stringify(state, null, 2) }],
-      };
-    }
-  );
-
   server.registerTool(
     "update_player",
     {
       description:
-        "Updates one or more player fields. Only provided fields are changed.",
+        "Updates player setup fields. Use this for initial setup or exceptional corrections only, not for normal narrative movement. Use move_to for story movement, set_class for class changes, and level_up for level changes.",
       inputSchema: {
         name: z.string().optional().describe("Player name"),
-        class: z.string().optional().describe("Player class"),
-        level: z.number().int().min(1).optional().describe("Player level"),
         location: z.string().optional().describe("Current location"),
+        backstory: z.string().optional().describe("Protagonist backstory / origin"),
       },
     },
-    async ({ name, class: playerClass, level, location }) => {
+    async ({ name, location, backstory }) => {
       const storage = getStorage();
       const state = await storage.load();
       if (name !== undefined) state.player.name = name;
-      if (playerClass !== undefined) state.player.class = playerClass;
-      if (level !== undefined) state.player.level = level;
       if (location !== undefined) state.player.location = location;
+      if (backstory !== undefined) state.player.backstory = backstory;
       await storage.save(state);
       return {
         content: [
@@ -62,10 +49,28 @@ export function registerPlayerTools(server: McpServer): void {
     async ({ description }) => {
       const storage = getStorage();
       const state = await storage.load();
-      state.wounds.push(description);
+      const normalized = normalizeText(description);
+      const existing = state.wounds.find(
+        (wound) => normalizeText(wound.description) === normalized
+      );
+
+      const wound = existing ?? { id: createEntityId(), description };
+      if (!existing) {
+        state.wounds.push(wound);
+      }
+
       await storage.save(state);
       return {
-        content: [{ type: "text", text: JSON.stringify({ wounds: state.wounds }, null, 2) }],
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              { wound, duplicated: existing !== undefined, wounds: state.wounds },
+              null,
+              2
+            ),
+          },
+        ],
       };
     }
   );
@@ -74,35 +79,86 @@ export function registerPlayerTools(server: McpServer): void {
     "heal_wound",
     {
       description:
-        "Removes a wound from the player. Call when a wound is healed via consumable, rest, or magic.",
+        "Removes a wound from the player. Prefer using the wound id returned by add_wound. Description matching is supported as a fallback when it is unambiguous.",
       inputSchema: {
-        description: z.string().describe("Exact wound description to remove"),
+        id: z.string().optional().describe("Stable wound id returned by add_wound"),
+        description: z
+          .string()
+          .optional()
+          .describe("Exact wound description to remove when no id is available"),
       },
     },
-    async ({ description }) => {
+    async ({ id, description }) => {
       const storage = getStorage();
       const state = await storage.load();
-      const idx = state.wounds.indexOf(description);
-      const healed = idx !== -1;
-      if (healed) state.wounds.splice(idx, 1);
+      if (!id && !description) {
+        return {
+          content: [{ type: "text", text: 'Provide either "id" or "description".' }],
+          isError: true,
+        };
+      }
+
+      let matchIndexes: number[] = [];
+      if (id) {
+        matchIndexes = state.wounds
+          .map((wound, index) => ({ wound, index }))
+          .filter(({ wound }) => wound.id === id)
+          .map(({ index }) => index);
+      } else if (description) {
+        const normalized = normalizeText(description);
+        matchIndexes = state.wounds
+          .map((wound, index) => ({ wound, index }))
+          .filter(({ wound }) => normalizeText(wound.description) === normalized)
+          .map(({ index }) => index);
+      }
+
+      if (matchIndexes.length === 0) {
+        await storage.save(state);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ wounds: state.wounds, healed: false }, null, 2),
+            },
+          ],
+        };
+      }
+
+      if (matchIndexes.length > 1) {
+        const candidates = matchIndexes.map((index) => state.wounds[index]);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  healed: false,
+                  reason: "ambiguous_wound_match",
+                  candidates,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      const healedWound = state.wounds[matchIndexes[0]];
+      state.wounds.splice(matchIndexes[0], 1);
       await storage.save(state);
       return {
-        content: [{ type: "text", text: JSON.stringify({ wounds: state.wounds, healed }, null, 2) }],
-      };
-    }
-  );
-
-  server.registerTool(
-    "reset_game",
-    {
-      description:
-        "Resets the entire game state to its initial values. Irreversible.",
-      inputSchema: {},
-    },
-    async () => {
-      await getStorage().save(structuredClone(DEFAULT_STATE));
-      return {
-        content: [{ type: "text", text: "Game state reset to default." }],
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              { healed: true, healed_wound: healedWound, wounds: state.wounds },
+              null,
+              2
+            ),
+          },
+        ],
       };
     }
   );
